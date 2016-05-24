@@ -126,6 +126,10 @@ namespace DTW
 
             for (int fileId = 0; fileId < files.Length; fileId++)
             {
+                if (File.Exists(files[fileId].Split('\\').Last() + "_pearsonDataCsv.txt"))
+                {
+                    continue;
+                }
                 Console.WriteLine("Performing DTW on csv data " + fileId + " of " + files.Length + "..");
 
                 string[] data = File.ReadAllLines(files[fileId]);
@@ -146,7 +150,8 @@ namespace DTW
                 }
 
                 Console.WriteLine("Computing DTW, this will take a while");
-                Dtw dtw = new Dtw(testDataPoints.ToArray(), recallDataPoints.ToArray(), DistanceMeasure.Euclidean, true, true, 1, 1);
+                //                Dtw dtw = new Dtw(testDataPoints.ToArray(), recallDataPoints.ToArray(), DistanceMeasure.Euclidean, true, true, null, null, 700);
+                Dtw dtw = new Dtw(testDataPoints.ToArray(), recallDataPoints.ToArray(), DistanceMeasure.Euclidean, true, true, slopeStepSizeDiagonal: 2, slopeStepSizeAside: 1);
 
                 var path = dtw.GetPath();
 
@@ -184,12 +189,16 @@ namespace DTW
                     pearsonData.Add(testDataPoints[pairing.Item1].ToString().Replace(',', '.') + ";" + recallDataPoints[pairing.Item2].ToString().Replace(',', '.'));
                 }
 
+                var pears = MathNet.Numerics.Statistics.Correlation.Pearson(path.Select(x => testDataPoints[x.Item1]).ToList(), path.Select(x => recallDataPoints[x.Item2]).ToList());
+                Console.WriteLine("Pearson for " + files[fileId] + ":");
+                Console.WriteLine(pears.ToString());
+
                 File.WriteAllLines(files[fileId].Split('\\').Last() + "_pearsonDataCsv.txt", pearsonData);
 
                 model.Series.Add(aSeries);
                 model.Series.Add(bSeries);
 
-                pngify.ExportToFile(model, "csv.png");
+                pngify.ExportToFile(model, files[fileId].Split('\\').Last() + "_csv.png");
             }
 
             Console.WriteLine("DonnoDK");
