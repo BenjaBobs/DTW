@@ -22,7 +22,10 @@ namespace DTW
             }
             else
             {
-                DTWCsv(Directory.GetFiles(Directory.GetCurrentDirectory()).Where(x => x.EndsWith(".csv")).ToArray());
+                foreach (string dir in Directory.GetDirectories(Directory.GetCurrentDirectory()))
+                {
+                    DTWCsv(Directory.GetFiles(dir).Where(x => x.EndsWith(".csv")).ToArray());
+                }
             }
 
 
