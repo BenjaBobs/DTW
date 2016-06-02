@@ -133,6 +133,9 @@ namespace DTW
                 {
                     continue;
                 }
+                Console.WriteLine("GarbageCollecting - memory: " + GC.GetTotalMemory(false));
+                GC.Collect();
+                Console.WriteLine("Garbage Collection completed - memory:" + GC.GetTotalMemory(false));
                 Console.WriteLine("Performing DTW on csv data " + fileId + " of " + files.Length + "..");
 
                 string[] data = File.ReadAllLines(files[fileId]);
