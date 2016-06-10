@@ -15,113 +15,13 @@ namespace DTW
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("1 = raw\n2 = csv");
-            if (Console.ReadLine() == "1")
+            foreach (string dir in Directory.GetDirectories(Directory.GetCurrentDirectory()))
             {
-                DTWRaw(Directory.GetDirectories(Directory.GetCurrentDirectory()));
-            }
-            else
-            {
-                foreach (string dir in Directory.GetDirectories(Directory.GetCurrentDirectory()))
-                {
-                    DTWCsv(Directory.GetFiles(dir).Where(x => x.EndsWith(".csv")).ToArray());
-                }
+                DTWCsv(Directory.GetFiles(dir).Where(x => x.EndsWith(".csv")).ToArray());
             }
 
-
+            Console.WriteLine("DonnoDK!");
             Console.ReadLine();
-        }
-
-        static void DTWRaw(string[] folders)
-        {
-
-            for (int folderId = 0; folderId < folders.Length; folderId++)
-            {
-                Console.WriteLine("Performing DTW on " + folderId + " of " + folders.Length + " subjects..");
-
-                string[] testData = File.ReadAllLines(folders[folderId] + "/test.dat");
-                string[] recallData = File.ReadAllLines(folders[folderId] + "/recall.dat");
-
-                List<Tuple<int, int>> testDataPoints = new List<Tuple<int, int>>();
-                List<Tuple<int, int>> recallDataPoints = new List<Tuple<int, int>>();
-
-                Console.WriteLine("Parsing files..");
-                foreach (var line in testData)
-                {
-                    int x, y;
-
-                    var split = line.Split('#');
-
-                    if (int.TryParse(split[0], out x) && int.TryParse(split[1], out y))
-                    {
-                        testDataPoints.Add(Tuple.Create(x, y));
-                    }
-                }
-
-                foreach (var line in recallData)
-                {
-                    int x, y;
-
-                    var split = line.Split('#');
-
-                    if (int.TryParse(split[0], out x) && int.TryParse(split[1], out y))
-                    {
-                        recallDataPoints.Add(Tuple.Create(x, y));
-                    }
-                }
-
-                Console.WriteLine("Doing Median filter");
-                testDataPoints = testDataPoints.MedianFilter(25, (x) => x.Item2).OrderBy(x => x.Item1).ToList();
-                recallDataPoints = recallDataPoints.MedianFilter(25, (x) => x.Item2).OrderBy(x => x.Item1).ToList();
-
-                Console.WriteLine("Computing DTW (" + testData.Length + " x " + recallData.Length + "), this will take a while");
-                Dtw dtw = new Dtw(testDataPoints.Select(p => (double)p.Item2).ToArray(), recallDataPoints.Select(p => (double)p.Item2).ToArray(), DistanceMeasure.Euclidean, true, true, 1, 1);
-
-                var path = dtw.GetPath();
-
-                Console.WriteLine("Done DTW'ing, generating img");
-
-                PngExporter pngify = new PngExporter();
-                pngify.Width = 36000;
-                pngify.Height = 4000;
-
-                var model = new PlotModel() { Title = "Red = test, blue = recall" };
-
-                var aSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Blue, MarkerSize = 10 };
-                var bSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Red, MarkerSize = 10 };
-
-                foreach (var item in testDataPoints)
-                {
-                    aSeries.Points.Add(new DataPoint(item.Item1, item.Item2));
-                }
-
-                foreach (var item in recallDataPoints)
-                {
-                    bSeries.Points.Add(new DataPoint(item.Item1, item.Item2));
-                }
-
-                List<string> pearsonData = new List<string>();
-                foreach (var pairing in path)
-                {
-                    var lineSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Gray, MarkerSize = 0.05 };
-
-                    lineSeries.Points.Add(new DataPoint(testDataPoints[pairing.Item1].Item1, (testDataPoints[pairing.Item1].Item2)));
-                    lineSeries.Points.Add(new DataPoint(recallDataPoints[pairing.Item2].Item1, (recallDataPoints[pairing.Item2].Item2)));
-
-                    model.Series.Add(lineSeries);
-
-                    pearsonData.Add(testDataPoints[pairing.Item1].Item2 + ";" + recallDataPoints[pairing.Item2].Item2);
-                }
-
-                File.WriteAllLines(folders[folderId] + "/pearsonDataRaw.txt", pearsonData);
-
-                model.Series.Add(aSeries);
-                model.Series.Add(bSeries);
-
-                pngify.ExportToFile(model, "raw.png");
-            }
-
-            Console.WriteLine("DonnoDK");
         }
 
         static void DTWCsv(string[] files)
@@ -131,19 +31,26 @@ namespace DTW
             {
                 if (File.Exists(files[fileId].Split('\\').Last() + "_pearsonDataCsv.txt"))
                 {
+                    File.Copy(files[fileId].Split('\\').Last() + "_pearsonDataCsv.txt", files[fileId] + "_pearsonDataCsv.txt", true);
+                    //Console.WriteLine("Copied " + files[fileId].Split('\\').Last() + "_pearsonDataCsv.txt" + " to " + files[fileId] + "_pearsonDataCsv.txt");
+
+                    if (File.Exists(files[fileId].Split('\\').Last() + "dtwCostInfo.txt"))
+                    {
+                        File.Copy(files[fileId].Split('\\').Last() + "_pearsonDataCsv.txt", files[fileId] + "dtwCostInfo.txt", true);
+                    }
+                    Console.WriteLine(files[fileId].Split('\\').Last() + " is already done, skipping.");
                     continue;
                 }
-                Console.WriteLine("GarbageCollecting - memory: " + GC.GetTotalMemory(false));
-                GC.Collect();
-                Console.WriteLine("Garbage Collection completed - memory:" + GC.GetTotalMemory(false));
+                var freed = GC.GetTotalMemory(false);
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
+                Console.WriteLine("Garbage Collection completed - memory:" + ((double)GC.GetTotalMemory(false) / 1024 / 1024 / 1024).ToString("0.0") + " GB (freed " + (freed / 1024 / 1024) + " MB)");
                 Console.WriteLine("Performing DTW on csv data " + fileId + " of " + files.Length + "..");
-
+                var watch = System.Diagnostics.Stopwatch.StartNew();
                 string[] data = File.ReadAllLines(files[fileId]);
+                Console.WriteLine("Data points: " + data.Length);
 
                 List<double> testDataPoints = new List<double>();
                 List<double> recallDataPoints = new List<double>();
-
-                Console.WriteLine("Parsing files");
                 foreach (var line in data)
                 {
                     var split = line.Replace(',', '.').Split(';');
@@ -155,59 +62,68 @@ namespace DTW
 
                 }
 
-                Console.WriteLine("Computing DTW, this will take a while");
                 //                Dtw dtw = new Dtw(testDataPoints.ToArray(), recallDataPoints.ToArray(), DistanceMeasure.Euclidean, true, true, null, null, 700);
                 Dtw dtw = new Dtw(testDataPoints.ToArray(), recallDataPoints.ToArray(), DistanceMeasure.Euclidean, true, true, slopeStepSizeDiagonal: 2, slopeStepSizeAside: 1);
 
                 var path = dtw.GetPath();
+                var cost = dtw.GetCost();
+                //var distanceMatrix = dtw.GetDistanceMatrix();
+                //var costMatrix = dtw.GetCostMatrix();
 
-                Console.WriteLine("Done DTW'ing, generating img");
+                File.WriteAllText(files[fileId].Split('\\').Last() + "dtwCostInfo.txt",
+                    "cost=" + cost +
+                    "\nbefore_length=" + data.Length +
+                    "\nbefore_cost=" + (cost / data.Length) +
+                    "\nafter_length=" + path.Length +
+                    "\nafter_cost=" + (cost / path.Length)
+                    );
 
-                PngExporter pngify = new PngExporter();
-                pngify.Width = 36000;
-                pngify.Height = 4000;
+                //PngExporter pngify = new PngExporter();
+                //pngify.Width = 36000;
+                //pngify.Height = 4000;
 
-                var model = new PlotModel() { Title = "Red = test, blue = recall" };
+                //var model = new PlotModel() { Title = "Red = test, blue = recall" };
 
-                var aSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Blue, MarkerSize = 10 };
-                var bSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Red, MarkerSize = 10 };
+                //var aSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Blue, MarkerSize = 10 };
+                //var bSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Red, MarkerSize = 10 };
 
-                for (int i = 0; i < testDataPoints.Count; i++)
-                {
-                    aSeries.Points.Add(new DataPoint(i, testDataPoints[i]));
-                }
+                //for (int i = 0; i < testDataPoints.Count; i++)
+                //{
+                //    aSeries.Points.Add(new DataPoint(i, testDataPoints[i]));
+                //}
 
-                for (int i = 0; i < recallDataPoints.Count; i++)
-                {
-                    bSeries.Points.Add(new DataPoint(i, recallDataPoints[i]));
-                }
+                //for (int i = 0; i < recallDataPoints.Count; i++)
+                //{
+                //    bSeries.Points.Add(new DataPoint(i, recallDataPoints[i]));
+                //}
 
-                List<string> pearsonData = new List<string>();
-                foreach (var pairing in path)
-                {
-                    var lineSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Gray, MarkerSize = 0.05 };
+                //List<string> pearsonData = new List<string>();
+                //foreach (var pairing in path)
+                //{
+                //    var lineSeries = new OxyPlot.Series.LineSeries() { Color = OxyColors.Gray, MarkerSize = 0.05 };
 
-                    lineSeries.Points.Add(new DataPoint(pairing.Item1, testDataPoints[pairing.Item1]));
-                    lineSeries.Points.Add(new DataPoint(pairing.Item2, recallDataPoints[pairing.Item2]));
+                //    lineSeries.Points.Add(new DataPoint(pairing.Item1, testDataPoints[pairing.Item1]));
+                //    lineSeries.Points.Add(new DataPoint(pairing.Item2, recallDataPoints[pairing.Item2]));
 
-                    model.Series.Add(lineSeries);
+                //    model.Series.Add(lineSeries);
 
-                    pearsonData.Add(testDataPoints[pairing.Item1].ToString().Replace(',', '.') + ";" + recallDataPoints[pairing.Item2].ToString().Replace(',', '.'));
-                }
+                //    pearsonData.Add(testDataPoints[pairing.Item1].ToString().Replace(',', '.') + ";" + recallDataPoints[pairing.Item2].ToString().Replace(',', '.'));
+                //}
 
-                var pears = MathNet.Numerics.Statistics.Correlation.Pearson(path.Select(x => testDataPoints[x.Item1]).ToList(), path.Select(x => recallDataPoints[x.Item2]).ToList());
-                Console.WriteLine("Pearson for " + files[fileId] + ":");
-                Console.WriteLine(pears.ToString());
+                //var pears = MathNet.Numerics.Statistics.Correlation.Pearson(path.Select(x => testDataPoints[x.Item1]).ToList(), path.Select(x => recallDataPoints[x.Item2]).ToList());
+                //Console.WriteLine("Pearson for " + files[fileId] + ":");
+                //Console.WriteLine(pears.ToString());
 
-                File.WriteAllLines(files[fileId].Split('\\').Last() + "_pearsonDataCsv.txt", pearsonData);
+                //File.WriteAllLines(files[fileId].Split('\\').Last() + "_pearsonDataCsv.txt", pearsonData);
 
-                model.Series.Add(aSeries);
-                model.Series.Add(bSeries);
+                //model.Series.Add(aSeries);
+                //model.Series.Add(bSeries);
 
-                pngify.ExportToFile(model, files[fileId].Split('\\').Last() + "_csv.png");
+                //pngify.ExportToFile(model, files[fileId].Split('\\').Last() + "_csv.png");
+                watch.Stop();
+                Console.WriteLine("Done in " + watch.Elapsed);
+                Console.WriteLine("");
             }
-
-            Console.WriteLine("DonnoDK");
         }
 
         static void SavePngPairing(string path, string name, List<double> A, List<double> B)
